@@ -1,0 +1,69 @@
+# Ignore Visual Studio temporary files, build results, and user-specific files
+# Build results
+[Bb]in/
+[Oo]bj/
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ipdb
+*.iobj
+*.ilk
+*.log
+*.tlog/
+*.cache
+*.up2date
+*.idb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vspscc
+*.vssscc
+*.ncb
+*.sdf
+*.opensdf
+*.suo
+*.sln.docstates
+*.v12.suo
+*.VC.db
+*.VC.opendb
+*.dbmdl
+*.psess
+*.vsp
+*.vsix
+*.docstates
+*.pidb
+*.svclog
+*.scc
+*.cachefile
+*.db
+*.opendb
+*.log
+*.vs/
+# Windows image file caches
+Thumbs.db
+*.DS_Store
+# Auto-generated files
+*.gch
+*.pch
+# YAML and package files
+packages/
+*.nupkg
+*.yaml
+# Others
+*.resx
+*.Designer.cs
+*.bak
+*.tmp
+*.swp
+*.swo
+*.sln.ide
+# Ignore x64 and x86 build folders
+x64/
+x86/
+# Ignore asset cache
+BattleCatWinForm/assets/
+# Ignore YamlDotNet package
+packages/YamlDotNet.*/
