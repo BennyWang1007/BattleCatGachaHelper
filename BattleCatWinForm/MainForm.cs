@@ -45,28 +45,27 @@ namespace BattleCatWinForm
             rollCountUpDown.Value = SimCount;
 
             // Set banners' combo box items
-            IntPtr ptr = BattleCatLib.GetBannerNames(out int count);
-            string[] banners = new string[count];
-            for (int i = 0; i < count; i++)
+            List<string> banners = BattleCatData.BannerNames;
+
+            // Sort banners by start date (descending), format: "yyyy-MM-dd ~ yyyy-MM-dd: description"
+            banners.Sort((a, b) =>
             {
-                IntPtr strPtr = Marshal.ReadIntPtr(ptr, i * IntPtr.Size);
-                banners[i] = Marshal.PtrToStringAnsi(strPtr);
-            }
+                string[] partsA = a.Split('~');
+                string[] partsB = b.Split('~');
+                DateTime startA = DateTime.ParseExact(partsA[0].Trim(), "yyyy-MM-dd", null);
+                DateTime startB = DateTime.ParseExact(partsB[0].Trim(), "yyyy-MM-dd", null);
+                DateTime endA = DateTime.ParseExact(partsA[1].Split(':')[0].Trim(), "yyyy-MM-dd", null);
+                DateTime endB = DateTime.ParseExact(partsB[1].Split(':')[0].Trim(), "yyyy-MM-dd", null);
+                int result = startB.CompareTo(startA);
+                if (result == 0) result = endB.CompareTo(endA);
+                return result;
+            });
 
-
-            bannerComboBox.Items.AddRange(banners);
+            bannerComboBox.Items.AddRange(banners.ToArray());
             bannerComboBox.SelectedIndex = 0;
             FetchBannerSelection();
 
-            // Initialize attributes
-            BCRHandle = BattleCatLib.CreateBattleCatRoll(BannerName, Seed);
-            for (int i = 0; i < selectedCellsA.Length; i++)
-            {
-                selectedCellsA[i] = false;
-                selectedCellsB[i] = false;
-                selectedCellsGuaranteeA[i] = false;
-                selectedCellsGuaranteeB[i] = false;
-            }
+            ResetCells();
 
             RunSimulation();
         }
@@ -82,6 +81,27 @@ namespace BattleCatWinForm
             selectedCellsB = null;
             selectedCellsGuaranteeA = null;
             selectedCellsGuaranteeB = null;
+        }
+
+        private void ResetCells()
+        {
+            // BCRHandle = BattleCatLib.CreateBattleCatRoll(BannerName, Seed);
+            var newHandle = BattleCatLib.CreateBattleCatRoll(BannerName, Seed);
+            if (newHandle != IntPtr.Zero)
+            {
+                BCRHandle = newHandle;
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("Failed to create BattleCatRoll from " + BannerName);
+            }
+            for (int i = 0; i < selectedCellsA.Length; i++)
+            {
+                selectedCellsA[i] = false;
+                selectedCellsB[i] = false;
+                selectedCellsGuaranteeA[i] = false;
+                selectedCellsGuaranteeB[i] = false;
+            }
         }
 
         private void RollButton_Click(object sender, EventArgs e)
@@ -192,6 +212,7 @@ namespace BattleCatWinForm
                 return;
             }
             BannerName = bannerComboBox.SelectedItem.ToString();
+            ResetCells(); // Reset the BCRHandle with the new banner
 
             // Rrint the selected banner name for debugging
             System.Diagnostics.Debug.WriteLine($"Selected Banner: {BannerName}");
