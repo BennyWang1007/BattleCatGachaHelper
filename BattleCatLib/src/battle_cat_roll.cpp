@@ -32,7 +32,7 @@ seed_t revert_seed(seed_t target_seed)
     return 0;
 }
 
-// find the rarity of the unit, given the seed and rateCumSum
+// Find the rarity of the unit, given the seed and rateCumSum
 uint32_t getRarity(seed_t seed, const vector<int>& rateCumSum)
 {
     int rarity = seed % 10000;
@@ -48,7 +48,7 @@ pair<uint32_t, string> getUnit(seed_t seed,
     const vector<string>& units,
     const vector<uint32_t>& removedIndices)
 {
-    uint32_t numUnitsInPool = units.size() - removedIndices.size();
+    uint32_t numUnitsInPool = (uint32_t)(units.size() - removedIndices.size());
     uint32_t seedMod = seed % numUnitsInPool;
     for (uint32_t removedIndex : removedIndices) {
         if (seedMod >= removedIndex) {
@@ -58,11 +58,11 @@ pair<uint32_t, string> getUnit(seed_t seed,
     return { seedMod, units[seedMod] };
 }
 
-uint32_t getUnitIdx(seed_t seed,
+uint32_t static getUnitIdx(seed_t seed,
     const vector<uint32_t>& units,
     const vector<uint32_t>& removedIndices)
 {
-    int numUnitsInPool = units.size() - removedIndices.size();
+    uint32_t numUnitsInPool = (uint32_t)(units.size() - removedIndices.size());
     uint32_t seedMod = seed % numUnitsInPool;
     for (uint32_t removedIndex : removedIndices) {
         if (seedMod >= removedIndex) {
@@ -181,7 +181,7 @@ void seedFinderThread(seed_t start,
 }
 */
 
-void seedFinderThread2(seed_t start,
+void static seedFinderThread2(seed_t start,
     seed_t end,
     const vector<uint32_t>& targetRolls,
     vector<seed_t>& seeds,
@@ -265,7 +265,7 @@ void seedFinderThread2(seed_t start,
 // }
 
 BattleCatRoll::BattleCatRoll(const Banner& banner, seed_t seed)
-    : banner(banner), seed(seed), lastRoll(UINT32_MAX) {
+    : banner(banner), seed(seed), lastRoll(UINT32_MAX), switchCount(0) {
 }
 
 seed_t BattleCatRoll::advanceSeed()
@@ -295,6 +295,7 @@ uint32_t BattleCatRoll::roll()
         uint32_t rerollSeed;
         vector<uint32_t> removedIdxs = { unitIndex - offset };
         do {
+            switchCount++;
             rerollSeed = advanceSeed();
             unitIndex = getUnitIdx(rerollSeed, pool->indexes, removedIdxs);
             removedIdxs.emplace_back(unitIndex - offset);
@@ -313,6 +314,20 @@ uint32_t BattleCatRoll::rollUncheck()
     uint32_t offset = banner.rarityCumCount[rarity];
     Pool* pool = &banner.pools[rarity];
     uint32_t unitIndex = getUnitIdx(unitSeed, pool->indexes, {});
+    return unitIndex;
+}
+
+uint32_t BattleCatRoll::rollWithRarity(uint32_t rarity)
+{
+    // FIXME: the result is incorrect
+    // if (banner.pools.size() < 4)
+    //     return 0;
+    // std::cout << "Rolling with rarity: " << rarity << ", seed: " << seed << std::endl;
+    // seed = advanceSeed();
+    // seed = advanceSeed();
+    Pool* pool = &banner.pools[rarity];
+    //pool->print();
+    uint32_t unitIndex = getUnitIdx(seed, pool->indexes, {});
     return unitIndex;
 }
 
@@ -350,6 +365,10 @@ vector<seed_t> BattleCatRoll::rolls(int rollNum)
 
 vector<seed_t> BattleCatRoll::rolls_11guaranteed()
 {
+    if (banner.guaranteed_rarity == (int)RarityClass::None) {
+        throw std::runtime_error("Error: rolls_11guaranteed should not be called without guaranteed rarity.");
+    }
+    switchCount = 0;
     vector<seed_t> rolled;
     rolled.reserve(11);
     for (int i = 0; i < 10; ++i) {

@@ -46,11 +46,11 @@ Banner initBanner(vector<SingleRarity> bannerInfo, const std::unordered_map<stri
     banner.rateCumSum = vector<int>(len);
     banner.pools = vector<Pool>(len);
     banner.idxToName = {};
-    banner.idxToId = {}; // Initialize idxToId
+    banner.idxToId = {};
     banner.rarityCumCount = {};
     uint32_t cumrate = 0, cumcount = 0;
     uint32_t idx = 0;
-    //auto& unitNameToId = BattleCatData::getInstance().unitNameToId;
+
 	std::cout << "Initializing banner with " << unitNameToId.size() << " units." << std::endl;
     for (size_t i = 0; i < len; ++i) {
         for (size_t j = 0; j < bannerInfo[i].units.size(); ++j) {
@@ -60,46 +60,46 @@ Banner initBanner(vector<SingleRarity> bannerInfo, const std::unordered_map<stri
         banner.rateCumSum[i] = cumrate;
         banner.pools[i].rate = bannerInfo[i].rate;
         banner.pools[i].units = bannerInfo[i].units;
-		// use utf8_to_big5 make sure the unit names are in the correct encoding
+		// Use utf8_to_big5 make sure the unit names are in the correct encoding
         banner.pools[i].reroll = bannerInfo[i].reroll;
         for (auto& unit : bannerInfo[i].units) {
             banner.idxToName.emplace_back(unit);
-			//banner.idxToId.emplace_back(unitNameToId[unit]); // Get ID from BattleCatData
 			auto it = unitNameToId.find(unit);
-			std::cout << "Unit: " << unit << ", ID: " << (it != unitNameToId.end() ? std::to_string(it->second) : "Unknown") << std::endl;
 			banner.idxToId.emplace_back(it != unitNameToId.end() ? it->second : -1); // Use -1 for unknown units
             banner.pools[i].indexes.emplace_back(idx++);
         }
         banner.rarityCumCount.emplace_back(cumcount);
-        cumcount += bannerInfo[i].units.size();
+        cumcount += (uint32_t)(bannerInfo[i].units.size());
     }
     banner.guaranteed_rarity = guaranteed_rarity;
 
-    // print idxToId
- //   for (size_t i = 0; i < banner.idxToId.size(); ++i) {
- //      cout << "Name: " << banner.idxToName[i] << ", ID: " << banner.idxToId[i] << endl;
- //   }
+    // banner.print();
 
- //   for (auto& [name, id] : unitNameToId) {
-	//	std::cout << "Unit: " << name << ", ID: " << id << std::endl;
-	//}
+    // print idxToId
+    // for (size_t i = 0; i < banner.idxToId.size(); ++i) {
+    //     cout << "Name: " << banner.idxToName[i] << ", ID: " << banner.idxToId[i] << endl;
+    // }
 
     // for (auto& [name, id] : unitNameToId) {
-    //    std::cout << "Key(hex): ";
-    //    for (unsigned char c : name) {
-    //        std::cout << std::hex << (int)c << " ";
-    //    }
-    //    std::cout << " | " << name << std::dec << " (" << id  << ")" << std::endl;
+	//     std::cout << "Unit: " << name << ", ID: " << id << std::endl;
+	// }
+
+    // for (auto& [name, id] : unitNameToId) {
+    //     std::cout << "Key(hex): ";
+    //     for (unsigned char c : name) {
+    //         std::cout << std::hex << (int)c << " ";
+    //     }
+    //     std::cout << " | " << name << std::dec << " (" << id  << ")" << std::endl;
     // }
 
     // for (size_t i = 0; i < len; ++i) {
-    //    for (auto& unit : bannerInfo[i].units) {
-    //        std::cout << "Unit(hex): ";
-    //        for (unsigned char c : unit) {
-    //            std::cout << std::hex << (int)c << " ";
-    //        }
-    //        std::cout << " | " << unit << std::dec << std::endl;
-    //    }
+    //     for (auto& unit : bannerInfo[i].units) {
+    //         std::cout << "Unit(hex): ";
+    //         for (unsigned char c : unit) {
+    //             std::cout << std::hex << (int)c << " ";
+    //         }
+    //         std::cout << " | " << unit << std::dec << std::endl;
+    //     }
     // }
 
     return banner;

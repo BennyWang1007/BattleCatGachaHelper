@@ -12,6 +12,17 @@
 
 using std::string, std::vector, std::unordered_map;
 
+enum class RarityClass
+{
+    Common = 0,
+    Ex = 1,
+    Rare = 2,
+    SuperRare = 3,
+    Uber = 4,
+    Legend = 5,
+    None = 6
+};
+
 string utf8_to_big5(const string& utf8);
 
 class BattleCatData

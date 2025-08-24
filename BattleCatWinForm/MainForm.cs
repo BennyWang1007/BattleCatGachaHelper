@@ -1,9 +1,14 @@
-﻿using System;
+﻿using BattleCatWinForm;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using BattleCatWinForm;
+using static BattleCatLib;
+
+using CatId = System.Int32;
+using Seed = System.UInt32;
 struct CatUnits
 {
     public int Id;
@@ -18,19 +23,24 @@ namespace BattleCatWinForm
     public partial class MainForm : Form
     {
         private IntPtr BCRHandle = IntPtr.Zero;
+        private Banner CurBanner;
         private string BannerName = "2025-08-13 ~ 2025-08-18: 共有5位合作限定角色登場！★點圖確認詳細吧!!";
+        // private string BannerName = "2025-08-13 ~ 2025-08-16: 傳說中的龍族們霸氣降臨！★點圖確認詳細吧!!";
         private uint Seed = 12345678;
-        private uint SimCount = 100;
+        private uint SimCount = 50;
 
         private bool[] selectedCellsA = new bool[1000];
         private bool[] selectedCellsB = new bool[1000];
         private bool[] selectedCellsGuaranteeA = new bool[1000];
         private bool[] selectedCellsGuaranteeB = new bool[1000];
 
-        private int[] UnitsId = new int[2000];
+        private readonly Dictionary<int, CatId> CellIdxToUnitId = new Dictionary<int, CatId>();
+        private readonly Dictionary<int, Seed> CellIdxToSeed = new Dictionary<int, Seed>();
+
+        private readonly int[] UnitsId = new int[2000];
 
         // Create a c++ like unordermap to store the current selected units and their counts
-        private Dictionary<int, uint> selectedUnitsCount = new Dictionary<int, uint>();
+        private readonly Dictionary<int, uint> selectedUnitsCount = new Dictionary<int, uint>();
 
         private Dictionary<int, string> unitIdToName;
         private Dictionary<int, int> unitIdToRarity;
@@ -40,6 +50,10 @@ namespace BattleCatWinForm
         {
             InitializeComponent();
             ReadCatData();
+
+            // A base init
+            BCRHandle = BattleCatLib.CreateBattleCatRoll(BannerName, Seed);
+            CurBanner = BattleCatData.Banners[BannerName];
 
             seedTextBox.Text = Seed.ToString();
             rollCountUpDown.Value = SimCount;
@@ -62,7 +76,7 @@ namespace BattleCatWinForm
             });
 
             bannerComboBox.Items.AddRange(banners.ToArray());
-            bannerComboBox.SelectedIndex = 0;
+            bannerComboBox.SelectedIndex = 10;
             FetchBannerSelection();
 
             ResetCells();
@@ -85,15 +99,32 @@ namespace BattleCatWinForm
 
         private void ResetCells()
         {
-            // BCRHandle = BattleCatLib.CreateBattleCatRoll(BannerName, Seed);
+            if (BattleCatData.Banners.ContainsKey(BannerName))
+            {
+                CurBanner = BattleCatData.Banners[BannerName];
+            }
+            else
+            {
+                throw new ArgumentException("Banner not found: " + BannerName);
+            }
+
             var newHandle = BattleCatLib.CreateBattleCatRoll(BannerName, Seed);
             if (newHandle != IntPtr.Zero)
             {
+                System.Diagnostics.Debug.WriteLine("Successfully created BattleCatRoll from " + BannerName);
                 BCRHandle = newHandle;
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("Failed to create BattleCatRoll from " + BannerName);
+                var banner = BattleCatData.Banners[BannerName];
+                if (BattleCatLib.SetBanner(BCRHandle, BannerName, banner))
+                {
+                    System.Diagnostics.Debug.WriteLine("Successfully Set Banner: " + BannerName);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("Failed to create BattleCatRoll from " + BannerName);
+                }
             }
             for (int i = 0; i < selectedCellsA.Length; i++)
             {
@@ -102,6 +133,8 @@ namespace BattleCatWinForm
                 selectedCellsGuaranteeA[i] = false;
                 selectedCellsGuaranteeB[i] = false;
             }
+            selectedUnitsCount.Clear();
+            selectedUnitsGrid.Rows.Clear();
         }
 
         private void RollButton_Click(object sender, EventArgs e)
@@ -127,80 +160,149 @@ namespace BattleCatWinForm
             resultGridA.Height = (int)(SimCount + 1) * resultGridCellHeight;
             resultGridB.Height = (int)(SimCount + 1) * resultGridCellHeight;
 
-            uint seedBackup = Seed;
-
-            // // Filling first column
-            // string[] col1 = new string[SimCount];
-            // for (uint i = 0; i < SimCount; i++)
-            // {
-            //     uint idx = BattleCatLib.Roll(BCRHandle);
-            //     col1[i] = BattleCatLib.GetUnitName(BCRHandle, idx);
-            // }
-
-            // // Filling third column
-            // BattleCatLib.SetSeed(BCRHandle, BattleCatLib.AdvanceSeed(seedBackup));
-            // string[] col3 = new string[SimCount];
-            // for (uint i = 0; i < SimCount; i++)
-            // {
-            //     uint idx = BattleCatLib.Roll(BCRHandle);
-            //     col3[i] = BattleCatLib.GetUnitName(BCRHandle, idx);
-            // }
-
-            // Filling first column
-            for (uint i = 0; i < SimCount; i++)
-            {
-                uint idx = BattleCatLib.RollUncheck(BCRHandle);
-                // col1[i] = BattleCatLib.GetUnitName(BCRHandle, idx);
-                UnitsId[i * 2] = BattleCatLib.GetUnitId(BCRHandle, idx);
-            }
-
-            // Filling third column
-            BattleCatLib.SetSeed(BCRHandle, BattleCatLib.AdvanceSeed(seedBackup));
-            for (uint i = 0; i < SimCount; i++)
-            {
-                uint idx = BattleCatLib.RollUncheck(BCRHandle);
-                // col3[i] = BattleCatLib.GetUnitName(BCRHandle, idx);
-                UnitsId[i * 2 + 1] = BattleCatLib.GetUnitId(BCRHandle, idx);
-            }
-
-            // Filling second column with guaranteed roll
-            BattleCatLib.SetSeed(BCRHandle, seedBackup);
-            string[] col2 = new string[SimCount];
-            for (uint i = 0; i < SimCount; i++)
-            {
-                uint idx = BattleCatLib.RollGuaranteed(BCRHandle);
-                col2[i] = BattleCatLib.GetUnitName(BCRHandle, idx);
-            }
-
-            // Filling fourth column with guaranteed roll
-            BattleCatLib.SetSeed(BCRHandle, BattleCatLib.AdvanceSeed(seedBackup));
-            string[] col4 = new string[SimCount];
-            for (uint i = 0; i < SimCount; i++)
-            {
-                uint idx = BattleCatLib.RollGuaranteed(BCRHandle);
-                col4[i] = BattleCatLib.GetUnitName(BCRHandle, idx);
-            }
-
             // Insert a blank row for staggering
             resultGridB.Rows.Add();
             resultGridB.Rows[0].Height = resultGridCellHeight / 2; // half cell height for staggering
 
+            uint seedBackup = Seed;
+
+            // Filling first column
+            for (uint i = 0; i < SimCount; i++)
+            {
+                CellIdxToSeed[(int)i * 2] = Seed;
+                Seed = BattleCatLib.AdvanceSeed(BattleCatLib.AdvanceSeed(Seed));
+                uint idx = BattleCatLib.RollUncheck(BCRHandle);
+                // FIXME: Don't know why GetUnitId returns wrong ID, use CurBanner to map idx to id
+                // UnitsId[i * 2] = BattleCatLib.GetUnitId(BCRHandle, idx);
+                UnitsId[i * 2] = CurBanner.IdxToId[(int)idx];
+                CellIdxToUnitId[(int)i * 4] = UnitsId[i * 2];
+            }
+
+            // Filling third column
+            Seed = BattleCatLib.AdvanceSeed(seedBackup);
+            BattleCatLib.SetSeed(BCRHandle, Seed);
+            for (uint i = 0; i < SimCount; i++)
+            {
+                CellIdxToSeed[(int)i * 2 + 1] = Seed;
+                Seed = BattleCatLib.AdvanceSeed(BattleCatLib.AdvanceSeed(Seed));
+                uint idx = BattleCatLib.RollUncheck(BCRHandle);
+                UnitsId[i * 2 + 1] = CurBanner.IdxToId[(int)idx];
+                CellIdxToUnitId[(int)i * 4 + 2] = UnitsId[i * 2 + 1];
+            }
+
+            int[] col2 = new int[SimCount];
+            UInt32[] switchCounts2 = new UInt32[SimCount];
+
+            int[] col4 = new int[SimCount];
+            UInt32[] switchCounts4 = new UInt32[SimCount];
+
+            // Getting guaranteed unit ids
+            if (CurBanner.GuaranteedRarity != RarityClass.None)
+            {
+                // Second column
+                BattleCatLib.SetSeed(BCRHandle, seedBackup);
+                var seedBackup2 = seedBackup;
+                for (uint i = 0; i < SimCount; i++)
+                {
+                    BattleCatLib.SetSeed(BCRHandle, seedBackup2);
+                    seedBackup2 = BattleCatLib.AdvanceSeed(BattleCatLib.AdvanceSeed(seedBackup2));
+                    uint idx = BattleCatLib.RollGuaranteed(BCRHandle, out UInt32 switchCount);
+                    col2[i] = CurBanner.IdxToId[(int)idx];
+                    switchCounts2[i] = switchCount;
+                    CellIdxToUnitId[(int)i * 4 + 1] = col2[i];
+                }
+
+                // Fourth column
+                var seedBackup4 = BattleCatLib.AdvanceSeed(seedBackup);
+                for (uint i = 0; i < SimCount; i++)
+                {
+                    BattleCatLib.SetSeed(BCRHandle, seedBackup4);
+                    seedBackup4 = BattleCatLib.AdvanceSeed(BattleCatLib.AdvanceSeed(seedBackup4));
+                    uint idx = BattleCatLib.RollGuaranteed(BCRHandle, out UInt32 switchCount);
+                    col4[i] = CurBanner.IdxToId[(int)idx];
+                    switchCounts4[i] = switchCount;
+                    CellIdxToUnitId[(int)i * 4 + 3] = col4[i];
+                }
+            }
+
             // Fill in the result grids
             for (int i = 0; i < SimCount; i++)
             {
-                // resultGridA.Rows.Add($"{i + 1}A", col1[i], col2[i]);
-                // resultGridB.Rows.Add(col3[i], col4[i], $"{i + 1}B");
-                resultGridA.Rows.Add($"{i + 1}A", unitIdToName.ContainsKey(UnitsId[i * 2]) ? unitIdToName[UnitsId[i * 2]] : "Unknown", col2[i]);
-                resultGridB.Rows.Add(unitIdToName.ContainsKey(UnitsId[i * 2 + 1]) ? unitIdToName[UnitsId[i * 2 + 1]] : "Unknown", col4[i], $"{i + 1}B");
+                string a0 = $"{i + 1}A";
+                string a1 = unitIdToName.ContainsKey(UnitsId[i * 2]) ? unitIdToName[UnitsId[i * 2]] : "Unknown";
 
-                // resultGridA.Rows.Add($"{i + 1}A", UnitsId[i * 2], col2[i]);
-                // resultGridB.Rows.Add(UnitsId[i * 2 + 1], col4[i], $"{i + 1}B");
+                int a1CurIdx = i * 2;
+                CatId a1PrevId = (i > 0) ? UnitsId[(i - 1) * 2] : -1;
+                CatId a1CurId = UnitsId[a1CurIdx];
+                int a1Rarity = unitIdToRarity.ContainsKey(a1CurId) ? unitIdToRarity[a1CurId] : -1;
+                while (a1CurId == a1PrevId)
+                {
+                    a1CurIdx++;
+                    System.Diagnostics.Debug.WriteLine($"Seed: {CellIdxToSeed[a1CurIdx]}, a1CurIdx: {a1CurIdx}, a1PrevId: {a1PrevId}");
+                    UInt32 idx = BattleCatLib.RollWithRarity(BCRHandle, CellIdxToSeed[a1CurIdx], (UInt32)a1Rarity);
+                    a1CurId = CurBanner.IdxToId[(int)idx];
+                    string name = unitIdToName[a1CurId];
+                    name = ""; // For debug breakpoint
+                }
+                int idxDiff = a1CurIdx - i * 2;
+                if (idxDiff > 0)
+                {
+                    if (idxDiff % 2 == 0)
+                    {
+                        a1 += $"\n← {idxDiff / 2 + i + 1}A {unitIdToName[UnitsId[a1CurIdx]]}";
+                    }
+                    else
+                    {
+                        a1 += $"\n→ {idxDiff / 2 + i + 2}B {unitIdToName[UnitsId[a1CurIdx]]}";
+                    }
+                }
+
+                string a2 = "";
+
+                string b0 = unitIdToName.ContainsKey(UnitsId[i * 2 + 1]) ? unitIdToName[UnitsId[i * 2 + 1]] : "Unknown";
+                string b1 = "";
+                string b2 = $"{i + 1}B";
+
+                if (CurBanner.GuaranteedRarity != RarityClass.None)
+                {
+                    bool noSwitchA = switchCounts2[i] == 1;
+                    bool noSwitchB = switchCounts4[i] == 1;
+                    a2 = unitIdToName.ContainsKey(col2[i]) ? unitIdToName[col2[i]] : "Unknown";
+                    if (noSwitchA)
+                    {
+                        a2 = $"← {i + 1 + 11 + switchCounts2[i] / 2}A {a2}";
+                    }
+                    else
+                    {
+                        a2 = $"{a2} → {i + 1 + 11 + switchCounts2[i] / 2}B";
+                    }
+                    b1 = unitIdToName.ContainsKey(col4[i]) ? unitIdToName[col4[i]] : "Unknown";
+                    if (noSwitchB)
+                    {
+                        b1 = $"{b1} → {i + 1 + 11 + switchCounts4[i] / 2}B";
+                    }
+                    else
+                    {
+                        b1 = $"← {i + 1 + 11 + switchCounts4[i] / 2}A {b1}";
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine($"{i} -> {a1}({UnitsId[i * 2]}), {a2.Split('\n')[0]}({col2[i]}) / {b0}({UnitsId[i * 2 + 1]}), {b1.Split('\n')[0]}({col4[i]})");
+
+                resultGridA.Rows.Add(a0, a1, a2);
+                resultGridB.Rows.Add(b0, b1, b2);
+
                 ColorCellsByRarity(resultGridA[1, i]);
                 ColorCellsByRarity(resultGridB[0, i]);
+
+                // foreach (var kvp in CellIdxToUnitId)
+                // {
+                //     var name = unitIdToName.ContainsKey(kvp.Value) ? unitIdToName[kvp.Value] : "Unknown";
+                //     System.Diagnostics.Debug.WriteLine($"CellIdxToUnitId[{kvp.Key}] = {kvp.Value} ({name})");
+                // }
             }
 
             Seed = seedBackup;
-            // BattleCatLib.DestroyBattleCatRoll(handle);
         }
 
         private void FetchBannerSelection()
@@ -211,10 +313,13 @@ namespace BattleCatWinForm
                 MessageBox.Show("Please select a banner.");
                 return;
             }
-            BannerName = bannerComboBox.SelectedItem.ToString();
+            var newBannerName = bannerComboBox.SelectedItem.ToString();
+            if (newBannerName == BannerName)
+                return;
+            BannerName = newBannerName;
             ResetCells(); // Reset the BCRHandle with the new banner
 
-            // Rrint the selected banner name for debugging
+            // Print the selected banner name for debugging
             System.Diagnostics.Debug.WriteLine($"Selected Banner: {BannerName}");
         }
 
@@ -298,8 +403,7 @@ namespace BattleCatWinForm
         private void ToggleResult(DataGridViewCell cell, bool isA)
         {
             bool[] selectedCells = isA ? selectedCellsA : selectedCellsB;
-            //string unitName = cell.Value.ToString();
-            int unitId = unitNameToId.ContainsKey(cell.Value.ToString()) ? unitNameToId[cell.Value.ToString()] : -1;
+
             if (selectedCells[cell.RowIndex])
             {
                 if (parentCellMap.ContainsKey(cell))
@@ -342,7 +446,8 @@ namespace BattleCatWinForm
             if (!selectedCells[cell.RowIndex])
             {
                 selectedCells[cell.RowIndex] = true;
-                int unitId = unitNameToId.ContainsKey(cell.Value.ToString()) ? unitNameToId[cell.Value.ToString()] : -1;
+                int cellIdx = CellToCellIdx(cell);
+                int unitId = CellIdxToUnitId[cellIdx];
                 cell.Style.BackColor = Color.Gray; // Change color to indicate selection
                 if (selectedUnitsCount.ContainsKey(unitId))
                 {
@@ -350,7 +455,7 @@ namespace BattleCatWinForm
                 }
                 else
                 {
-                    selectedUnitsCount[unitId] = 1; // Initialize count to 1
+                    selectedUnitsCount[unitId] = 1;
                 }
             }
             System.Diagnostics.Debug.WriteLine($"Selected cell {cell.Value} at ({cell.RowIndex}, {cell.ColumnIndex})");
@@ -358,40 +463,43 @@ namespace BattleCatWinForm
 
         private void UnselectCell(DataGridViewCell cell)
         {
+
+            if (cell.Tag is string tag && tag == "forbidden")
+            {
+                UnCrossCell(cell); // Uncross the cell
+                return;
+            }
+
             bool isA = (cell.DataGridView == resultGridA);
-    
+
             bool[] selectedCells;
             if (isA && cell.ColumnIndex == 2 || !isA && cell.ColumnIndex == 1)
             {
-            selectedCells = isA ? selectedCellsGuaranteeA : selectedCellsGuaranteeB;
-            cell.Style.BackColor = Color.White;
+                selectedCells = isA ? selectedCellsGuaranteeA : selectedCellsGuaranteeB;
+                cell.Style.BackColor = Color.White;
             }
             else
             {
-            selectedCells = isA ? selectedCellsA : selectedCellsB;
-            ColorCellsByRarity(cell);
+                selectedCells = isA ? selectedCellsA : selectedCellsB;
+                ColorCellsByRarity(cell);
             }
             if (selectedCells[cell.RowIndex])
             {
-            selectedCells[cell.RowIndex] = false;
-            int unitId = unitNameToId.ContainsKey(cell.Value.ToString()) ? unitNameToId[cell.Value.ToString()] : -1;
-            if (selectedUnitsCount.ContainsKey(unitId))
-            {
-                selectedUnitsCount[unitId]--;
-                if (selectedUnitsCount[unitId] <= 0)
+                selectedCells[cell.RowIndex] = false;
+                int cellIdx = CellToCellIdx(cell);
+                int unitId = CellIdxToUnitId[cellIdx];
+                if (selectedUnitsCount.ContainsKey(unitId))
                 {
-                selectedUnitsCount.Remove(unitId);
+                    selectedUnitsCount[unitId]--;
+                    if (selectedUnitsCount[unitId] <= 0)
+                    {
+                        selectedUnitsCount.Remove(unitId);
+                    }
                 }
-            }
-            else
-            {
-                throw new InvalidOperationException($"Unit {unitId} not found in selectedUnitsCount, cannot decrement count.");
-            }
-            }
-            if (cell.Tag == "forbidden")
-            {
-            cell.Tag = null; // Remove the tag if it was crossed
-            UnCrossCell(cell); // Uncross the cell
+                else
+                {
+                    throw new InvalidOperationException($"Unit {unitId} not found in selectedUnitsCount, cannot decrement count.");
+                }
             }
             System.Diagnostics.Debug.WriteLine($"Unselected cell {cell.Value} at ({cell.RowIndex}, {cell.ColumnIndex})");
         }
@@ -399,7 +507,6 @@ namespace BattleCatWinForm
         private void ToggleResultGuarantee(DataGridViewCell cell, bool isA)
         {
             bool[] selectedCellsGuarantee = isA ? selectedCellsGuaranteeA : selectedCellsGuaranteeB;
-            int unitId = unitNameToId.ContainsKey(cell.Value.ToString()) ? unitNameToId[cell.Value.ToString()] : -1;
 
             if (selectedCellsGuarantee[cell.RowIndex])
             {
@@ -414,22 +521,40 @@ namespace BattleCatWinForm
 
         private void ToggleResult11Pulls(int row, bool isA)
         {
+            // No guarantee, no 11 pulls
+            if (CurBanner.GuaranteedRarity == RarityClass.None)
+            {
+                return;
+            }
+
             if (isA)
             {
                 if (!selectedCellsGuaranteeA[row])
                 {
+                    // Pre-check is there is forbbidden cell
+                    for (int i = 0; i < 10; ++i)
+                    {
+                        if (row + i >= resultGridA.RowCount) break;
+                        var cell = resultGridA[1, row + i];
+                        if (cell.Tag is string tag && tag == "forbidden") return;
+                        if (selectedCellsA[row + i]) return;
+                    }
+
                     var parentCell = resultGridA[2, row];
                     for (int i = 0; i < 10; ++i)
                     {
+                        if (row + i >= resultGridA.RowCount) break;
                         AddCellGroup(resultGridA[1, row + i], parentCell);
                     }
                     SelectGroup(resultGridA[1, row], isA);
+                    if (row + 10 >= resultGridA.RowCount) return;
                     AddCellGroup(resultGridB[0, row + 10], parentCell);
                     CrossCell(resultGridB[0, row + 10]);
                 }
                 else
                 {
                     UnselectGroup(resultGridA[1, row], isA);
+                    if (row + 10 >= resultGridB.RowCount) return;
                     UnCrossCell(resultGridB[0, row + 10]);
                 }
             }
@@ -437,18 +562,30 @@ namespace BattleCatWinForm
             {
                 if (!selectedCellsGuaranteeB[row])
                 {
+                    // Pre-check is there is forbbidden cell
+                    for (int i = 0; i < 10; ++i)
+                    {
+                        if (row + i >= resultGridB.RowCount) break;
+                        var cell = resultGridB[0, row + i];
+                        if (cell.Tag is string tag && tag == "forbidden") return;
+                        if (selectedCellsB[row + i]) return;
+                    }
+
                     var parentCell = resultGridB[1, row];
                     for (int i = 0; i < 10; ++i)
                     {
+                        if (row + i >= resultGridB.RowCount) break;
                         AddCellGroup(resultGridB[0, row + i], parentCell);
                     }
                     SelectGroup(resultGridB[0, row], isA);
+                    if (row + 9 >= resultGridA.RowCount) return;
                     AddCellGroup(resultGridA[1, row + 9], parentCell);
                     CrossCell(resultGridA[1, row + 9]);
                 }
                 else
                 {
                     UnselectGroup(resultGridB[0, row], isA);
+                    if (row + 9 >= resultGridA.RowCount) return;
                     UnCrossCell(resultGridA[1, row + 9]);
                 }
             }
@@ -508,6 +645,9 @@ namespace BattleCatWinForm
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
 
+            var cell = (sender as DataGridView)[e.ColumnIndex, e.RowIndex];
+            if (cell.Tag is string tag && tag == "forbidden") return;
+
             bool isA = (sender == resultGridA);
             if (!isA && e.RowIndex == 0) return;
             if (isA)
@@ -541,8 +681,8 @@ namespace BattleCatWinForm
             UpdateSelectedUnits();
 
             // Print debug info
-            string gridName = isA ? "A" : "B";
-            //System.Diagnostics.Debug.WriteLine($"Cell mouse down in resultGrid{gridName} at {e.RowIndex}, {e.ColumnIndex}");
+            // string gridName = isA ? "A" : "B";
+            // System.Diagnostics.Debug.WriteLine($"Cell mouse down in resultGrid{gridName} at {e.RowIndex}, {e.ColumnIndex}");
         }
 
         private void ResultGrid_CellMouseMove(object sender, DataGridViewCellMouseEventArgs e)
@@ -560,8 +700,8 @@ namespace BattleCatWinForm
             UpdateSelectedUnits();
 
             // Print debug info
-            string gridName = isA ? "A" : "B";
-            //System.Diagnostics.Debug.WriteLine($"Cell mouse move in resultGrid{gridName} at {e.RowIndex}, {e.ColumnIndex}");
+            // string gridName = isA ? "A" : "B";
+            // System.Diagnostics.Debug.WriteLine($"Cell mouse move in resultGrid{gridName} at {e.RowIndex}, {e.ColumnIndex}");
         }
 
         private void ResultGrid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
@@ -574,8 +714,8 @@ namespace BattleCatWinForm
             swipeGrid = null;
 
             // Print debug info
-            string gridName = (sender == resultGridA) ? "A" : "B";
-            //System.Diagnostics.Debug.WriteLine($"Cell mouse up in resultGrid{gridName} at {e.RowIndex}, {e.ColumnIndex}");
+            // string gridName = (sender == resultGridA) ? "A" : "B";
+            // System.Diagnostics.Debug.WriteLine($"Cell mouse up in resultGrid{gridName} at {e.RowIndex}, {e.ColumnIndex}");
         }
 
 
@@ -607,9 +747,8 @@ namespace BattleCatWinForm
         private void UpdateSelectedUnits()
         {
             selectedUnitsGrid.Rows.Clear();
-            // Sort selectedUnits by rarity than id
-            // copy a list of selectedUnitsCount to sort
 
+            // Sort selectedUnits by rarity, count and then id
             var sortedUnits = new List<CatUnits>();
             foreach (var kvp in selectedUnitsCount)
             {
@@ -670,35 +809,39 @@ namespace BattleCatWinForm
             {
                 return;
             }
+            // FIXME: don't know why errors
+            // int cellIdx = CellToCellIdx(cell);
+            // System.Diagnostics.Debug.WriteLine($"Cell index for {cell.Value}: {cellIdx}");
+            // int id = CellIdxToUnitId[cellIdx];
 
             int rarity = unitIdToRarity[id];
-            if (rarity == 0)
+            if (rarity == (int)RarityClass.Common)
             {
-                cell.Style.BackColor = Color.White; // Common
+                cell.Style.BackColor = Color.White;
             }
-            else if (rarity == 1)
+            else if (rarity == (int)RarityClass.Ex)
             {
-                cell.Style.BackColor = Color.White; // Ex
+                cell.Style.BackColor = Color.White;
             }
-            else if (rarity == 2)
+            else if (rarity == (int)RarityClass.Rare)
             {
-                cell.Style.BackColor = Color.White; // Rare
+                cell.Style.BackColor = Color.White;
             }
-            else if (rarity == 3)
+            else if (rarity == (int)RarityClass.SuperRare)
             {
-                cell.Style.BackColor = Color.FromArgb(220, 220, 0); // Super Rare, dark yellow
+                cell.Style.BackColor = Color.FromArgb(220, 220, 0); // Dark yellow
             }
-            else if (rarity == 4)
+            else if (rarity == (int)RarityClass.Uber)
             {
-                cell.Style.BackColor = Color.Red; // Uber 
+                cell.Style.BackColor = Color.Red;
             }
-            else if (rarity == 5)
+            else if (rarity == (int)RarityClass.Legend)
             {
-                cell.Style.BackColor = Color.Purple; // Legend
+                cell.Style.BackColor = Color.Purple;
             }
-            else if (rarity == 6)
+            else if (IsExclusive(id)) // Exclusive
             {
-                cell.Style.BackColor = Color.LightBlue; // Exclusive
+                cell.Style.BackColor = Color.LightBlue;
             }
             else
             {
@@ -762,7 +905,7 @@ namespace BattleCatWinForm
         {
             if (childCell == null || parentCell == null) return;
 
-            System.Diagnostics.Debug.WriteLine($"Adding cell group: {childCell.Value} to {parentCell.Value}");
+            // System.Diagnostics.Debug.WriteLine($"Adding cell group: {childCell.Value} to {parentCell.Value}");
 
             // Add the child cell to the parent's group
             if (!childCellsMap.ContainsKey(parentCell))
@@ -786,6 +929,33 @@ namespace BattleCatWinForm
             if (cell == null) return;
             cell.Tag = null;
             cell.DataGridView.InvalidateCell(cell);
+        }
+
+        private int CellToCellIdx(DataGridViewCell cell)
+        {
+            if (cell == null || cell.RowIndex < 0 || cell.ColumnIndex < 0)
+            {
+                throw new ArgumentException("Invalid cell provided.");
+            }
+            // Calculate the index based on the row and column
+            if (cell.DataGridView == resultGridA)
+            {
+                return cell.RowIndex * 4 + cell.ColumnIndex - 1; // 4k + 0-1 for A
+            }
+            else if (cell.DataGridView == resultGridB)
+            {
+                return cell.RowIndex * 4 - 2 + cell.ColumnIndex; // 4k + 2-3 for B
+            }
+            else
+            {
+                throw new ArgumentException("Cell does not belong to a recognized grid.");
+            }
+        }
+
+        private bool IsExclusive(CatId id)
+        {
+            // TODO
+            return false;
         }
     }
 }

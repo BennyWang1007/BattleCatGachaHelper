@@ -1,4 +1,5 @@
 // #define BATTLE_CAT_EXPORTS
+#pragma execution_character_set("utf-8")
 #include <iostream>
 #include <memory>
 #include <string>
@@ -18,7 +19,7 @@ static bool g_bannersInitialized = false;
 static ProgressCallback g_progressCallback = nullptr;
 
 // Initialize banners on first use
-void InitializeBannersIfNeeded() {
+void static InitializeBannersIfNeeded() {
     if (!g_bannersInitialized) {
 		g_banners = BattleCatData::getInstance().getBanners();
         g_bannersInitialized = true;
@@ -176,6 +177,19 @@ extern "C" {
         }
     }
 
+    __declspec(dllexport) uint32_t __cdecl RollWithRarity(BattleCatRollHandle handle, seed_t seed, uint32_t rarity) {
+        if (!handle) return 0;
+
+        try {
+            BattleCatRollWrapper* wrapper = static_cast<BattleCatRollWrapper*>(handle);
+            wrapper->roll->setSeed(seed);
+            return wrapper->roll->rollWithRarity(rarity);
+        }
+        catch (...) {
+            return 0;
+        }
+    }
+
     void RollMultiple(BattleCatRollHandle handle, int rollNum, uint32_t* results) {
         if (!handle || !results || rollNum <= 0) return;
 
@@ -214,7 +228,8 @@ extern "C" {
         }
     }
 
-    __declspec(dllexport) uint32_t __cdecl RollGuaranteed(BattleCatRollHandle handle) {
+    __declspec(dllexport) uint32_t __cdecl RollGuaranteed(BattleCatRollHandle handle, uint32_t* switchCount)
+    {
 		if (!handle) return 0;
 
         try {
@@ -223,6 +238,7 @@ extern "C" {
             std::vector<uint32_t> rolls = wrapper->roll->rolls_11guaranteed();
             wrapper->roll->setSeed(seedBak);
             wrapper->roll->roll();
+            *switchCount = wrapper->roll->getSwitchCount();
             return rolls[rolls.size() - 1]; // Return the last roll as the guaranteed unit
         }
         catch (...) {
@@ -242,6 +258,7 @@ extern "C" {
         }
     }
 
+    // FIXME: 嘗試讀取或寫入受保護的記憶體。這通常表示其他記憶體已損毀。
     int GetUnitName(BattleCatRollHandle handle, uint32_t unitIndex, char* buffer, int bufferSize) {
         if (!handle || !buffer || bufferSize <= 0) return 0;
 
@@ -364,6 +381,57 @@ extern "C" {
 
     void SetProgressCallback(ProgressCallback callback) {
         g_progressCallback = callback;
+    }
+
+    __declspec(dllexport) bool __cdecl AddBannerSimple(
+        BattleCatRollHandle handle,
+        const char* bannerName,
+        int* rateCumSum,
+        uint32_t* rarityCumCount,
+        int* poolRates,
+        char*** poolUnits,        // Array of arrays of unit names
+        uint32_t** poolIndexes,   // Array of arrays of indexes
+        uint32_t* poolUnitCounts, // Number of units in each pool
+        bool* poolRerolls,
+        uint32_t poolCount,
+        char** idxToName,
+        int* idxToId,
+        uint32_t totalUnits,
+        uint32_t guaranteed_rarity
+    )
+    {
+        Banner banner;
+        for (uint32_t i = 0; i < poolCount; i++) {
+            banner.rateCumSum.emplace_back(rateCumSum[i]);
+            banner.rarityCumCount.emplace_back(rarityCumCount[i]);
+
+            Pool pool;
+            pool.rate = poolRates[i];
+            pool.reroll = poolRerolls[i];
+            for (uint32_t j = 0; j < poolUnitCounts[i]; j++) {
+                pool.units.emplace_back(string(poolUnits[i][j]));
+                pool.indexes.emplace_back(poolIndexes[i][j]);
+            }
+            banner.pools.emplace_back(std::move(pool));
+        }
+
+        for (uint32_t i = 0; i < totalUnits; i++) {
+            banner.idxToName.emplace_back(string(idxToName[i]));
+            banner.idxToId.emplace_back(idxToId[i]);
+        }
+
+        banner.guaranteed_rarity = guaranteed_rarity;
+
+        try {
+            BattleCatRollWrapper* wrapper = static_cast<BattleCatRollWrapper*>(handle);
+            // banner.print();
+            wrapper->roll->setBanner(banner);
+        }
+        catch (...) {
+            return false;
+        }
+
+        return true;
     }
 
 } // extern "C"

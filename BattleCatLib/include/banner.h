@@ -13,6 +13,20 @@ struct Pool {
     std::vector<string> units;
     std::vector<uint32_t> indexes;
     bool reroll = false;
+
+    void print() const {
+        std::cout << "Pool - Rate: " << rate << ", Reroll: " << reroll << std::endl;
+        std::cout << "Units: ";
+        for (const auto& unit : units) {
+            std::cout << unit << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Indexes: ";
+        for (const auto& index : indexes) {
+            std::cout << index << " ";
+        }
+        std::cout << std::endl;
+    }
 };
 
 struct RollUnit {
@@ -38,6 +52,41 @@ struct Banner {
     uint32_t guaranteed_rarity = 2;
 
     Banner& operator=(const Banner&) = default;
+
+    void print() const
+    {
+        std::cout << "Rate cumulative sum: ";
+        for (auto& rateCumSum : rateCumSum) {
+            std::cout << rateCumSum << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Rarity cumulative count: ";
+        for (auto& rarityCumCount : rarityCumCount) {
+            std::cout << rarityCumCount << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Pools: " << std::endl;
+        for (const auto& pool : pools) {
+            pool.print();
+        }
+
+        std::cout << "Index to Name: ";
+        for (const auto& name : idxToName) {
+            std::cout << name << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Index to ID: ";
+        for (const auto& id : idxToId) {
+            std::cout << id << " ";
+        }
+        std::cout << std::endl;
+
+        std::cout << "Guaranteed Rarity: " << guaranteed_rarity << std::endl;
+    }
+
 };
 
 

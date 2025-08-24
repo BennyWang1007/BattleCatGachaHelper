@@ -11,18 +11,18 @@ namespace BattleCatWinForm
     // Represents a single event's data
     public class EventData
     {
-        public string start_on { get; set; }
-        public string end_on { get; set; }
-        public string version { get; set; }
-        public string name { get; set; }
-        public int id { get; set; }
-        public uint rare { get; set; }
-        public uint supa { get; set; }
-        public uint uber { get; set; }
-        public uint legend { get; set; } // can be missing
-        public string platinum { get; set; } // can be string or missing
-        public bool guaranteed { get; set; } // optional
-        public bool step_up { get; set; } // optional
+        public string StartOn { get; set; }
+        public string EndOn { get; set; }
+        public string Version { get; set; }
+        public string Name { get; set; }
+        public int Id { get; set; }
+        public uint Rare { get; set; }
+        public uint Supa { get; set; }
+        public uint Uber { get; set; }
+        public uint Legend { get; set; } // can be missing
+        public string Platinum { get; set; } // can be string or missing
+        public bool Guaranteed { get; set; } // optional
+        public bool StepUp { get; set; } // optional
     }
     // Represents the stats for a single cat evolution/form as a dynamic dictionary
     public class CatStat : Dictionary<string, object>
@@ -73,7 +73,7 @@ namespace BattleCatWinForm
 
     public enum RarityClass : uint
     {
-        Normal,
+        Common,
         Ex,
         Rare,
         SuperRare,
@@ -85,17 +85,22 @@ namespace BattleCatWinForm
     public class Pool
     {
         public List<int> Cats { get; set; } = new List<int>();
+        public bool Reroll { get; set; } = false;
         public void AddCat(CatId catId)
         {
             Cats.Add(catId);
+        }
+
+        public void SetReroll(bool reroll)
+        {
+            Reroll = reroll;
         }
     }
 
     public class Banner
     {
-        private readonly uint _unitCount;
         private uint[] _rateCumSum { get; set; } = new uint[BCDataConstant.RarityCount];
-        private uint[] _rarityCumCount { get; set; } = new uint[BCDataConstant.RarityCount];
+        public uint[] RarityRates { get; set; } = new uint[BCDataConstant.RarityCount];
         public Pool[] Pools { get; set; } = new Pool[BCDataConstant.RarityCount];
 
         public List<string> IdxToName { get; set; } = new List<string>();
@@ -109,28 +114,47 @@ namespace BattleCatWinForm
               Dictionary<int, int> unitIdToRarity,
               Dictionary<int, string> unitIdToName)
         {
-            for (int i = 0; i < BCDataConstant.RarityCount; i++)
+            // if rarity is uber(4) then move unit to the back
+            // for (int i = 0; i < poolUnitIds.Count; i++)
+            // {
+            //     var rarity = unitIdToRarity[poolUnitIds[i]];
+            //     if (rarity == (int)RarityClass.Uber)
+            //     {
+            //         poolUnitIds.Add(poolUnitIds[i]);
+            //         poolUnitIds.RemoveAt(i);
+            //         i--;
+            //     }
+            // }   
+            // for (int i = 0; i < BCDataConstant.RarityCount; i++)
+            // {
+            //     Pools[i] = new Pool();
+            // }
+            for (int r = 0; r < BCDataConstant.RarityCount; r++)
             {
-                Pools[i] = new Pool();
+                Pools[r] = new Pool();
+                for (CatId i = 0; i < poolUnitIds.Count; i++)
+                {
+                    var rarity = unitIdToRarity[poolUnitIds[i]];
+                    if (rarity != r) continue;
+                    System.Diagnostics.Debug.Assert(rarity >= 0 && rarity < BCDataConstant.RarityCount, $"Invalid rarity {rarity} for unit ID {poolUnitIds[i]}");
+                    Pools[rarity].AddCat(poolUnitIds[i]);
+                    IdxToName.Add(unitIdToName[poolUnitIds[i]]);
+                    IdxToId.Add(poolUnitIds[i]);
+                }
             }
-            for (CatId i = 0; i < _unitCount; i++)
-            {
-                var rarity = unitIdToRarity[poolUnitIds[i]];
-                System.Diagnostics.Debug.Assert(rarity >= 0 && rarity < BCDataConstant.RarityCount, $"Invalid rarity {rarity} for unit ID {poolUnitIds[i]}");
-                Pools[rarity].AddCat(poolUnitIds[i]);
-                IdxToName.Add(unitIdToName[poolUnitIds[i]]);
-                IdxToId.Add(poolUnitIds[i]);
-            }
+
+            // TODO: check if there are exceptions
+            Pools[(int)RarityClass.Rare].SetReroll(true);
 
             for (int i = 0; i < BCDataConstant.RarityCount; i++)
             {
-                _rarityCumCount[i] = rarityCumCount[i];
+                RarityRates[i] = rarityCumCount[i];
             }
 
-            _rateCumSum[0] = _rarityCumCount[0];
+            _rateCumSum[0] = RarityRates[0];
             for (int i = 1; i < _rateCumSum.Length; i++)
             {
-                _rateCumSum[i] = _rateCumSum[i - 1] + _rarityCumCount[i];
+                _rateCumSum[i] = _rateCumSum[i - 1] + RarityRates[i];
             }
 
             GuaranteedRarity = guaranteedRarity;
@@ -140,9 +164,9 @@ namespace BattleCatWinForm
     // Root structure for the YAML file
     public class BattleCatYaml
     {
-        public Dictionary<CatId, CatDataRaw> cats { get; set; }
-        public Dictionary<int, BannerDataRaw> gacha { get; set; }
-        public Dictionary<string, EventData> events { get; set; }
+        public Dictionary<CatId, CatDataRaw> Cats { get; set; }
+        public Dictionary<int, BannerDataRaw> Gacha { get; set; }
+        public Dictionary<string, EventData> Events { get; set; }
     }
 
     public static class BattleCatDataLoader
@@ -161,9 +185,9 @@ namespace BattleCatWinForm
         public static Dictionary<CatId, string> GetUnitIdToName(BattleCatYaml data)
         {
             var unitIdToName = new Dictionary<CatId, string>();
-            if (data?.cats != null)
+            if (data?.Cats != null)
             {
-                foreach (var kvp in data.cats)
+                foreach (var kvp in data.Cats)
                 {
                     var id = kvp.Key;
                     var cat = kvp.Value;
@@ -179,9 +203,9 @@ namespace BattleCatWinForm
         public static Dictionary<string, CatId> GetUnitNameToId(BattleCatYaml data)
         {
             var unitNameToId = new Dictionary<string, CatId>();
-            if (data?.cats != null)
+            if (data?.Cats != null)
             {
-                foreach (var kvp in data.cats)
+                foreach (var kvp in data.Cats)
                 {
                     var id = kvp.Key;
                     var cat = kvp.Value;
@@ -197,9 +221,9 @@ namespace BattleCatWinForm
         public static Dictionary<int, int> GetUnitIdToRarity(BattleCatYaml data)
         {
             var unitIdToRarity = new Dictionary<int, int>();
-            if (data?.cats != null)
+            if (data?.Cats != null)
             {
-                foreach (var kvp in data.cats)
+                foreach (var kvp in data.Cats)
                 {
                     var id = kvp.Key;
                     var cat = kvp.Value;
@@ -211,12 +235,12 @@ namespace BattleCatWinForm
 
         public static Dictionary<string, EventData> GetEvents(BattleCatYaml data)
         {
-            return data?.events ?? new Dictionary<string, EventData>();
+            return data?.Events ?? new Dictionary<string, EventData>();
         }
 
         public static Dictionary<int, BannerDataRaw> GetGachaBanners(BattleCatYaml data)
         {
-            return data?.gacha ?? new Dictionary<int, BannerDataRaw>();
+            return data?.Gacha ?? new Dictionary<int, BannerDataRaw>();
         }
     }
 
@@ -227,19 +251,20 @@ namespace BattleCatWinForm
         public static Dictionary<int, int> UnitIdToRarity { get; private set; } = new Dictionary<int, int>();
         public static Dictionary<string, Banner> Banners { get; private set; } = new Dictionary<string, Banner>();
         public static List<string> BannerNames { get; private set; } = new List<string>();
-        private static Dictionary<int, List<CatId>> _idToCatIds { get; set; } = new Dictionary<int, List<CatId>>();
+        // The mapping of banner ID to list of CatIds in that banner
+        private static Dictionary<int, List<CatId>> _bannerIdToCatIds { get; set; } = new Dictionary<int, List<CatId>>();
 
-        public static Dictionary<int, BannerDataRaw> _gachaBanners { get; private set; } = new Dictionary<int, BannerDataRaw>();
-        private static BattleCatYaml _yamlData { get; set; }
-        private static Dictionary<string, EventData> _events;
+        private static Dictionary<int, BannerDataRaw> _gachaBanners { get; set; } = new Dictionary<int, BannerDataRaw>();
+        //private static BattleCatYaml _yamlData { get; set; }
+        //private static Dictionary<string, EventData> _events;
         static BattleCatData()
         {
             // Initialize all dictionaries
-            _yamlData = BattleCatDataLoader.LoadYaml("bc-tw.yaml");
-            _events = BattleCatDataLoader.GetEvents(_yamlData);
+            BattleCatYaml _yamlData = BattleCatDataLoader.LoadYaml("bc-tw.yaml");
+            Dictionary<string, EventData> _events = BattleCatDataLoader.GetEvents(_yamlData);
             _gachaBanners = BattleCatDataLoader.GetGachaBanners(_yamlData);
 
-            foreach (var kvp in _yamlData.cats)
+            foreach (var kvp in _yamlData.Cats)
             {
                 var id = kvp.Key;
                 var cat = kvp.Value;
@@ -252,15 +277,15 @@ namespace BattleCatWinForm
             {
                 int i = kvp.Key;
                 BannerDataRaw banner = kvp.Value;
-                if (!_idToCatIds.ContainsKey(i))
+                if (!_bannerIdToCatIds.ContainsKey(i))
                 {
-                    _idToCatIds[i] = new List<CatId>();
+                    _bannerIdToCatIds[i] = new List<CatId>();
                 }
                 if (banner.Cats != null)
                 {
                     foreach (var catId in banner.Cats)
                     {
-                        _idToCatIds[i].Add(catId);
+                        _bannerIdToCatIds[i].Add(catId);
                     }
                 }
                 else
@@ -272,10 +297,21 @@ namespace BattleCatWinForm
             foreach (var kvp in _events)
             {
                 var eventData = kvp.Value;
-                string bannerName = eventData.start_on + " ~ " + eventData.end_on + ": " + eventData.name;
-                uint[] cumRate = new uint[] { 0, 0, eventData.rare, eventData.supa, eventData.uber, eventData.legend };
-                RarityClass guaranteed = eventData.guaranteed ? RarityClass.Uber : RarityClass.None;
-                Banners[bannerName] = new Banner(_idToCatIds[eventData.id], cumRate, guaranteed, UnitIdToRarity, UnitIdToName);
+                string bannerName = eventData.StartOn + " ~ " + eventData.EndOn + ": " + eventData.Name;
+                uint[] cumRate = new uint[] { 0, 0, eventData.Rare, eventData.Supa, eventData.Uber, eventData.Legend };
+                var poolUnitIds = _bannerIdToCatIds.ContainsKey(eventData.Id) ? _bannerIdToCatIds[eventData.Id] : new List<CatId>();
+                RarityClass guaranteed = eventData.Guaranteed ? RarityClass.Uber : RarityClass.None;
+
+                var banner = new Banner(poolUnitIds, cumRate, guaranteed, UnitIdToRarity, UnitIdToName);
+                Banners[bannerName] = banner;
+                if (bannerName == "2025-08-13 ~ 2025-08-16: 傳說中的龍族們霸氣降臨！★點圖確認詳細吧!!")
+                {
+                    for (int i = 0; i < BCDataConstant.RarityCount; i++)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Pool[{i}].Reroll = {banner.Pools[i].Reroll}");
+                    }
+                }
+                // Banners[bannerName] = new Banner(poolUnitIds, cumRate, guaranteed, UnitIdToRarity, UnitIdToName);
                 BannerNames.Add(bannerName);
                 // TODO: (platinum: legend/platinum)
             }

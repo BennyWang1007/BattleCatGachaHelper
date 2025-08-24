@@ -82,9 +82,12 @@ public:
 	seed_t getSeed() const { return seed; }
     void setSeed(seed_t seed);
 
+    uint32_t getSwitchCount() const { return switchCount; }
+
     // roll one time, return the unit index
     uint32_t roll();
     uint32_t rollUncheck();
+    uint32_t rollWithRarity(uint32_t rarity);
 
     // roll rollNum times, return vector of the unit indexes
     vector<uint32_t> rolls(int rollNum);
@@ -109,4 +112,5 @@ private:
     Banner banner;
     seed_t seed;
     uint32_t lastRoll;
+    uint32_t switchCount;
 };

@@ -35,9 +35,10 @@ extern "C" {
     // Roll operations, return unit **index**
     BATTLE_CAT_API uint32_t Roll(BattleCatRollHandle handle);
     BATTLE_CAT_API uint32_t RollUncheck(BattleCatRollHandle handle);
+    BATTLE_CAT_API uint32_t RollWithRarity(BattleCatRollHandle handle, seed_t seed, uint32_t rarity);
     BATTLE_CAT_API void RollMultiple(BattleCatRollHandle handle, int rollNum, uint32_t* results);
     BATTLE_CAT_API void Roll11Guaranteed(BattleCatRollHandle handle, uint32_t* results);
-    BATTLE_CAT_API uint32_t RollGuaranteed(BattleCatRollHandle handle);
+	BATTLE_CAT_API uint32_t RollGuaranteed(BattleCatRollHandle handle, uint32_t* switchCount);
 
     // Utility functions
     BATTLE_CAT_API int GetUnitId(BattleCatRollHandle handle, uint32_t unitIndex);
@@ -53,6 +54,25 @@ extern "C" {
     // Progress callback for seed finding
     typedef void (*ProgressCallback)(float percentage);
     BATTLE_CAT_API void SetProgressCallback(ProgressCallback callback);
+
+    BATTLE_CAT_API bool AddBannerSimple(
+        BattleCatRollHandle handle,
+        const char* bannerName,
+        int* rateCumSum,
+        uint32_t* rarityCumCount,
+        int* poolRates,
+        char*** poolUnits,        // Array of arrays of unit names
+        uint32_t** poolIndexes,   // Array of arrays of indexes
+        uint32_t* poolUnitCounts, // Number of units in each pool
+        bool* poolRerolls,
+        uint32_t poolCount,
+        char** idxToName,
+        int* idxToId,
+        uint32_t totalUnits,
+        uint32_t guaranteed_rarity
+    );
+
+    // BATTLE_CAT_API bool AddBanner(const char* bannerName, const CBanner* banner);
 
 #ifdef __cplusplus
 }
